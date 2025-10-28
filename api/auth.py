@@ -257,9 +257,9 @@ async def login_user(credentials: LoginCredentials, response: Response):
             # 🔒 HttpOnly: No accesible vía JavaScript (Anti-XSS)
             httponly=True,
             # 🔑 Secure: True en producción (HTTPS), False en desarrollo (HTTP)
-            secure=True if IS_PRODUCTION else False,
+            secure=True,
             # ✅ CAMBIO CLAVE: Usamos 'Lax' en desarrollo (HTTP)
-            samesite=samesite_value,
+            samesite="Lax",
             max_age=ACCESS_TOKEN_EXPIRE_SECONDS,
             path="/",
         )
