@@ -1,23 +1,35 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.responses import Response
 # inicializar supabase client
 
 # Importamos el router modular
 from api.auth import auth_router
-
+from api.denuncias import denuncias_router
 
 # --- Configuración de FastAPI ---
 app = FastAPI(
     title="API Modular de Verificación",
     description="Aplicación Backend con FastAPI y Supabase.",
 )
+
+
+# Ruta para servir el favicon
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    return FileResponse("favicon.svg", media_type="image/svg+xml")
+
 # --- Configuración de CORS ---
 origins = [
     "https://www.denunciasv.help",   # Ejemplo: React corriendo en 4321
     "denunciasv.help",
     "http://localhost:4321",   # El origen que estaba causando el error
-    # "https://tu-app-en-produccion.com", # Cuando despliegues
+    "http://localhost:8000",  # Cuando despliegues
 ]
 
 app.add_middleware(
@@ -37,6 +49,7 @@ app.add_middleware(
 # Montamos el router de autenticación con el prefijo /api
 app.include_router(auth_router, prefix="/api")
 
+app.include_router(denuncias_router, prefix="/denuncias", tags=["Denuncias"])
 # --- Ruta de prueba ---
 
 

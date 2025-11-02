@@ -1,3 +1,5 @@
+from datetime import datetime
+from typing import Optional, List
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -33,6 +35,47 @@ class LoginCredentials(BaseModel):
 
     dui: str = Field(..., description="Número de DUI del usuario")
     password: str = Field(..., description="Contraseña del usuario")
+
+    class Config:
+        from_attributes = True
+
+
+class DenunciaCreate(BaseModel):
+    """
+    Schema para crear una nueva denuncia
+    """
+    category: str = Field(..., min_length=1, max_length=50,
+                          description="Categoría de la denuncia")
+    location: str = Field(..., min_length=1,
+                          description="Ubicación de la denuncia")
+    description: str = Field(..., min_length=10,
+                             description="Descripción detallada")
+    evidence: Optional[List[str]] = Field(
+        default=[], description="URLs de evidencias")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "category": "Robo",
+                "location": "Calle Principal #123, Apopa",
+                "description": "Descripción detallada del incidente",
+                "evidence": ["url1.jpg", "url2.jpg"]
+            }
+        }
+
+
+class DenunciaResponse(BaseModel):
+    """
+    Schema para la respuesta de una denuncia
+    """
+    id: str
+    user_id: str
+    categoria: str
+    ubicacion: str
+    descripcion: str
+    evidencias: Optional[List[str]] = []
+    fecha_creacion: datetime
+    estado: str
 
     class Config:
         from_attributes = True
