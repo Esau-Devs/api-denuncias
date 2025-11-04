@@ -13,7 +13,7 @@ from typing import List, Dict, Any
 
 from fastapi import APIRouter, HTTPException, status, Response, Request, Depends
 from fastapi.concurrency import run_in_threadpool
-from postgrest.exceptions import APIError
+
 from jose import jwt, JWTError
 from dotenv import load_dotenv  # 💡 ¡NUEVA IMPORTACIÓN!
 
