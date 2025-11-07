@@ -1,0 +1,39 @@
+
+# Ignorar entornos virtuales
+.venv
+venv
+ENV
+env
+
+# Ignorar archivos y carpetas del sistema
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
+# Ignorar archivos de configuración local
+.env
+*.log
+
+# Ignorar cachés y archivos temporales
+*.tmp
+*.bak
+*.swp
+
+# Ignorar archivos de Git
+.git
+.gitignore
+
+# Ignorar configuraciones del editor
+.vscode
+.idea
+
+# Ignorar imágenes o datos locales
+*.jpg
+*.png
+*.jpeg
+*.mp4
+*.mov
+*.avi
