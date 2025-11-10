@@ -73,7 +73,7 @@ class DenunciaResponse(BaseModel):
     categoria: str
     ubicacion: str
     descripcion: str
-    evidencias: Optional[List[str]] = []
+    evidencias: Optional[str] = None
     fecha_creacion: datetime
     estado: str
 

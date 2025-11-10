@@ -1,8 +1,9 @@
 FROM python:3.11-slim
 
+# Establece el directorio de trabajo
 WORKDIR /app
 
-# Instalar dependencias necesarias para face_recognition + OpenCV
+# Instalar dependencias del sistema necesarias para face_recognition + OpenCV + Tesseract
 RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     g++ \
@@ -18,15 +19,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr-spa \
     && rm -rf /var/lib/apt/lists/*
 
+# Copiar y instalar dependencias de Python
 COPY requirements.txt .
-
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copiar todo el código al contenedor
 COPY . .
 
-# Establece el puerto esperado por Cloud Run
+# Establecer el puerto esperado por Cloud Run
 ENV PORT=8080
 
-# Comando de inicio
-CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT}
+# Para producción, usar JSON array en CMD para evitar problemas con señales
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]

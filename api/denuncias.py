@@ -8,6 +8,52 @@ from jose import jwt, JWTError
 import os
 import uuid
 
+# 🔐 IMPORTAR VAULT CLIENT
+print("\n" + "=" * 80)
+print("📦 IMPORTANDO VAULT CLIENT EN DENUNCIAS ROUTER")
+print("=" * 80)
+
+try:
+    from vault_client import vault_client
+
+    print(f"✅ Módulo vault_client importado exitosamente")
+
+    if vault_client is not None:
+        VAULT_ENABLED = True
+        print(f"✅ vault_client está disponible")
+        print(
+            f"   • Vault Address: {getattr(vault_client, 'vault_addr', 'N/A')}")
+        print(
+            f"   • Transit Engine: {getattr(vault_client, 'transit_mount_point', 'N/A')}")
+        print(
+            f"   • Encryption Key: {getattr(vault_client, 'key_name', 'N/A')}")
+        print(f"🔐 ENCRIPTACIÓN HABILITADA para denuncias")
+    else:
+        VAULT_ENABLED = False
+        print(f"⚠️  vault_client es None - Vault NO disponible")
+        print(f"⚠️  Las denuncias se guardarán SIN ENCRIPTAR")
+
+except ImportError as ie:
+    print(f"❌ Error de importación: {str(ie)}")
+    print(f"   No se encontró el módulo vault_client.py")
+    VAULT_ENABLED = False
+    vault_client = None
+
+except Exception as e:
+    print(f"❌ Error inesperado al importar Vault:")
+    print(f"   Tipo: {type(e).__name__}")
+    print(f"   Mensaje: {str(e)}")
+    import traceback
+    traceback.print_exc()
+    VAULT_ENABLED = False
+    vault_client = None
+
+print(f"\n📊 Estado final:")
+print(f"   • VAULT_ENABLED: {VAULT_ENABLED}")
+print(
+    f"   • vault_client: {'Disponible' if vault_client else 'No disponible'}")
+print("=" * 80 + "\n")
+
 denuncias_router = APIRouter()
 
 # Constantes JWT
@@ -144,20 +190,21 @@ async def crear_denuncia(
     files: List[UploadFile] = File(None)  # Archivos opcionales
 ):
     """
-    Endpoint UNIFICADO para crear denuncia con archivos
-    Recibe FormData con campos y archivos
-    Los archivos se guardan en Supabase Storage
+    Endpoint para crear denuncia con archivos
+    🔐 ENCRIPTACIÓN AUTOMÁTICA CON VAULT (si está habilitado)
     """
     # 1. Autenticar usuario
     current_user = await get_current_user(request)
 
     print("=" * 60)
-    print("🔍 DEBUGGING - Datos recibidos:")
-    print(f"Usuario autenticado: {current_user['sub']}")
+    print("🔍 DATOS RECIBIDOS:")
+    print(f"Usuario: {current_user['sub']}")
     print(f"Categoría: {category}")
     print(f"Ubicación: {location}")
-    print(f"Descripción: {description}")
+    print(f"Descripción: {description[:50]}..." if len(
+        description) > 50 else f"Descripción: {description}")
     print(f"Archivos: {len(files) if files else 0}")
+    print(f"🔐 Vault habilitado: {VAULT_ENABLED}")
     print("=" * 60)
 
     # 2. Procesar archivos (si hay)
@@ -180,7 +227,7 @@ async def crear_denuncia(
                     detail=error_msg
                 )
 
-            # Guardar archivo en Supabase Storage y obtener URL pública
+            # Guardar archivo en Supabase Storage
             try:
                 file_url = await save_file_to_storage(file, current_user["sub"])
                 evidencias_urls.append(file_url)
@@ -193,19 +240,40 @@ async def crear_denuncia(
 
     print(f"📎 Evidencias procesadas: {len(evidencias_urls)} archivo(s)")
 
-    # 3. Crear denuncia en la base de datos
+    # 3. Preparar datos de la denuncia
     nueva_denuncia = {
         "user_id": current_user["sub"],
         "categoria": category,
         "ubicacion": location,
         "descripcion": description,
-        "evidencias": evidencias_urls,  # Array de URLs públicas de Supabase Storage
+        "evidencias": evidencias_urls,
         "fecha_creacion": datetime.utcnow().isoformat(),
         "estado": "pendiente"
     }
 
+    # 🔐 4. ENCRIPTAR DATOS CON VAULT (si está habilitado)
+    if VAULT_ENABLED:
+        try:
+            print(f"🔐 Encriptando datos con Vault...")
+            nueva_denuncia = await run_in_threadpool(
+                lambda: vault_client.encrypt_denuncia_fields(nueva_denuncia)
+            )
+            print(f"✅ Datos encriptados correctamente")
+            print(f"   - Categoría: {nueva_denuncia['categoria'][:30]}...")
+            print(f"   - Ubicación: {nueva_denuncia['ubicacion'][:30]}...")
+            print(f"   - Descripción: {nueva_denuncia['descripcion'][:30]}...")
+        except Exception as e:
+            print(f"❌ Error al encriptar con Vault: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error al encriptar la denuncia: {str(e)}"
+            )
+    else:
+        print(f"⚠️  Vault deshabilitado - guardando sin encriptar")
+
+    # 5. Guardar en Supabase
     try:
-        print(f"📤 Insertando denuncia en Supabase...")
+        print(f"📤 Guardando en Supabase...")
 
         insert_res = await run_in_threadpool(
             lambda: supabase.from_("denuncias")
@@ -229,18 +297,21 @@ async def crear_denuncia(
 
         denuncia_creada = insert_res.data[0]
 
-        print(f"✅ Denuncia creada exitosamente: ID {denuncia_creada['id']}")
+        print(f"✅ Denuncia creada: ID {denuncia_creada['id']}")
+        if VAULT_ENABLED:
+            print(f"🔒 Datos guardados ENCRIPTADOS en Supabase")
 
         return {
-            "message": "Denuncia creada exitosamente",
+            "message": "Denuncia creada exitosamente" + (" y encriptada" if VAULT_ENABLED else ""),
             "denuncia_id": denuncia_creada["id"],
+            "encrypted": VAULT_ENABLED,
             "data": denuncia_creada
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error inesperado al crear denuncia: {str(e)}")
+        print(f"❌ Error inesperado: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
@@ -253,10 +324,12 @@ async def crear_denuncia(
 async def obtener_mis_denuncias(request: Request):
     """
     Obtener todas las denuncias del usuario autenticado
+    🔓 DESENCRIPTACIÓN AUTOMÁTICA CON VAULT (si está habilitado)
     """
     current_user = await get_current_user(request)
 
     try:
+        print(f"📥 Obteniendo denuncias de Supabase...")
         response = await run_in_threadpool(
             lambda: supabase.from_("denuncias")
             .select("*")
@@ -271,7 +344,34 @@ async def obtener_mis_denuncias(request: Request):
                 detail="Error al obtener denuncias"
             )
 
-        return response.data
+        denuncias = response.data
+        print(f"📋 {len(denuncias)} denuncia(s) encontrada(s)")
+
+        # 🔓 DESENCRIPTAR CON VAULT (si está habilitado)
+        if VAULT_ENABLED:
+            denuncias_desencriptadas = []
+
+            for denuncia in denuncias:
+                try:
+                    print(
+                        f"🔓 Desencriptando denuncia ID: {denuncia.get('id')}")
+                    denuncia_desencriptada = await run_in_threadpool(
+                        lambda d=denuncia: vault_client.decrypt_denuncia_fields(
+                            d)
+                    )
+                    denuncias_desencriptadas.append(denuncia_desencriptada)
+                    print(f"✅ Desencriptada correctamente")
+                except Exception as e:
+                    print(
+                        f"⚠️  Error desencriptando {denuncia.get('id')}: {str(e)}")
+                    # Si falla, retornar datos originales
+                    denuncias_desencriptadas.append(denuncia)
+
+            print(f"✅ {len(denuncias_desencriptadas)} denuncia(s) procesada(s)")
+            return denuncias_desencriptadas
+        else:
+            print(f"⚠️  Vault deshabilitado - retornando sin desencriptar")
+            return denuncias
 
     except HTTPException:
         raise
@@ -280,4 +380,98 @@ async def obtener_mis_denuncias(request: Request):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error interno: {str(e)}"
+        )
+
+
+# 🔍 NUEVO: Health Check de Vault
+@denuncias_router.get("/vault/health")
+async def vault_health_check():
+    """
+    Verificar estado de la conexión con Vault
+    """
+    if not VAULT_ENABLED or vault_client is None:
+        return {
+            "status": "disabled",
+            "vault_connected": False,
+            "message": "⚠️  Vault no está habilitado o configurado",
+            "encryption_enabled": False
+        }
+
+    try:
+        is_connected = await run_in_threadpool(vault_client.check_connection)
+
+        if is_connected:
+            return {
+                "status": "healthy",
+                "vault_connected": True,
+                "vault_addr": vault_client.vault_addr,
+                "transit_engine": vault_client.transit_mount_point,
+                "encryption_key": vault_client.key_name,
+                "encryption_enabled": True,
+                "message": "✅ Vault conectado y funcionando correctamente"
+            }
+        else:
+            return {
+                "status": "unhealthy",
+                "vault_connected": False,
+                "vault_addr": vault_client.vault_addr,
+                "encryption_enabled": False,
+                "message": "❌ No se pudo conectar a Vault - Verificar token"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "vault_connected": False,
+            "error": str(e),
+            "encryption_enabled": False,
+            "message": f"❌ Error verificando Vault: {str(e)}"
+        }
+
+
+# 🧪 NUEVO: Endpoint de prueba de encriptación
+@denuncias_router.post("/vault/test")
+async def test_vault_encryption():
+    """
+    Probar encriptación/desencriptación de Vault
+    """
+    if not VAULT_ENABLED or vault_client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Vault no está habilitado"
+        )
+
+    try:
+        test_data = "Prueba de encriptación 🔐"
+
+        print(f"🧪 Probando encriptación...")
+        print(f"   Datos originales: {test_data}")
+
+        # Encriptar
+        encrypted = await run_in_threadpool(
+            lambda: vault_client.encrypt_data(test_data)
+        )
+        print(f"   Datos encriptados: {encrypted}")
+
+        # Desencriptar
+        decrypted = await run_in_threadpool(
+            lambda: vault_client.decrypt_data(encrypted)
+        )
+        print(f"   Datos desencriptados: {decrypted}")
+
+        success = (test_data == decrypted)
+
+        return {
+            "success": success,
+            "original": test_data,
+            "encrypted": encrypted,
+            "decrypted": decrypted,
+            "match": success,
+            "message": "✅ Encriptación funcionando correctamente" if success else "❌ Error en encriptación"
+        }
+
+    except Exception as e:
+        print(f"❌ Error en prueba: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error en prueba de encriptación: {str(e)}"
         )
