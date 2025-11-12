@@ -1,5 +1,6 @@
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Union
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -73,9 +74,27 @@ class DenunciaResponse(BaseModel):
     categoria: str
     ubicacion: str
     descripcion: str
-    evidencias: Optional[str] = None
+    evidencias: Union[str, List[str], None] = []
     fecha_creacion: datetime
     estado: str
+    firma_digital: Optional[str] = None
+    hash_original: Optional[str] = None
 
     class Config:
+        from_attributes = True
+
+# 🚨 Nuevo Schema para los datos de usuario
+
+
+class UsuarioResponse(BaseModel):
+    """Respuesta con datos del usuario"""
+
+    id: str
+    dui: str
+    nombre: str = Field(alias="nombre_completo")
+    genero: str
+    fechaCreacion: datetime = Field(alias="fecha_registro")
+
+    class Config:
+        populate_by_name = True  # Permite usar alias
         from_attributes = True

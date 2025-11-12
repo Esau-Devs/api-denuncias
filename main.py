@@ -13,7 +13,7 @@ import time
 # Importamos el router modular
 from api.auth import auth_router
 from api.denuncias import denuncias_router
-
+from api.usuario import usuario_router
 # --- Configuración de FastAPI ---
 app = FastAPI(
     title="API Modular de Verificación",
@@ -54,6 +54,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api")
 
 app.include_router(denuncias_router, prefix="/denuncias", tags=["Denuncias"])
+app.include_router(usuario_router, prefix="/usuario", tags=["Usuario"])
 # --- Ruta de prueba ---
 
 
